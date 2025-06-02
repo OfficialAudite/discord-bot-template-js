@@ -1,0 +1,17 @@
+{
+  "name": "discord-bot-nodejs-setup",
+  "version": "1.0.0",
+  "description": "Easy setup For Discord bot in NodeJS",
+  "main": "Main.js",
+  "scripts": {
+    "dev": "node Main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.5.0",
+    "sqlite3": "^5.1.7"
+  }
+}
