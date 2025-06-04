@@ -25,13 +25,13 @@ module.exports = async (Bot) => {
       const existingHash = await db.getCommandHash(command.data.name);
 
       fileCommandNames.add(command.data.name);
-
+      Bot.commands.set(command.data.name, command);
+      
       if (existingHash === hash) {
         skipped++;
         continue;
       }
 
-      Bot.commands.set(command.data.name, command);
       commandsToRegister.push(jsonData);
       updated++;
       loaded++;
