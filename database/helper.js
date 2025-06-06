@@ -60,6 +60,25 @@ class DB {
         });
     }
 
+    async getAllCommandNames() {
+        await this.initDatabase();
+        return new Promise((resolve, reject) => {
+            this.db.all(`SELECT name FROM slash_command_hashes`, [], (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows.map(row => row.name));
+            });
+        });
+    }
+
+    async deleteCommandHash(name) {
+        return new Promise((resolve, reject) => {
+            this.db.run(`DELETE FROM slash_command_hashes WHERE name = ?;`, [name], (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+    }
+
 }
 
 module.exports = { DB };

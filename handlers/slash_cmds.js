@@ -7,13 +7,13 @@ module.exports = async (Bot) => {
   const db = new DB();
   await db.initDatabase();
 
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   const commandsPath = path.join(__dirname, '../slash_cmds');
   const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
-  const fileCommandNames = new Set();
   const commandsToRegister = [];
-
-  let loaded = 0, updated = 0, skipped = 0;
+  const currentCommandNames = new Set();
+  let hasHashChanges = false;
 
   for (const file of commandFiles) {
     const filePath = path.join(commandsPath, file);
@@ -24,56 +24,56 @@ module.exports = async (Bot) => {
       const hash = db.hashCommandData(jsonData);
       const existingHash = await db.getCommandHash(command.data.name);
 
-      fileCommandNames.add(command.data.name);
       Bot.commands.set(command.data.name, command);
-      
-      if (existingHash === hash) {
-        skipped++;
-        continue;
-      }
-
+      currentCommandNames.add(command.data.name);
       commandsToRegister.push(jsonData);
-      updated++;
-      loaded++;
+
+      if (existingHash !== hash) {
+        hasHashChanges = true;
+        await db.updateCommandHash(command.data.name, hash);
+        console.log(`↻ Updated or new command detected: ${command.data.name}`);
+      }
     } else {
-      console.warn(`[WARNING] Command at ${filePath} is missing required "data" or "execute" property.`);
+      console.warn(`[WARNING] Command at ${filePath} is missing required "data" or "execute".`);
     }
   }
 
-  console.log(`${loaded} Loaded. ${updated} Updated. ${skipped} Skipped.`);
+  // Handle removed commands
+  const existingCommandNamesInDb = await db.getAllCommandNames();
+  const deletedCommands = existingCommandNamesInDb.filter(name => !currentCommandNames.has(name));
 
-  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+  if (deletedCommands.length > 0) {
+    try {
+      const apiCommands = await rest.get(Routes.applicationCommands(process.env.BotID));
+
+      for (const deletedName of deletedCommands) {
+        const toDelete = apiCommands.find(cmd => cmd.name === deletedName);
+        if (toDelete) {
+          await rest.delete(Routes.applicationCommand(process.env.BotID, toDelete.id));
+          console.log(`🗑 Removed deleted command from API: ${deletedName}`);
+        }
+        await db.deleteCommandHash(deletedName);
+        console.log(`🗃️ Removed deleted command from DB: ${deletedName}`);
+      }
+    } catch (err) {
+      console.error(`❌ Error during deletion of removed commands:`, err);
+    }
+  }
+
+  // Upload all if any hash has changed
+  if (!hasHashChanges) {
+    console.log('✅ No new or updated commands. Slash command sync skipped.');
+    return;
+  }
 
   try {
-    // Register new/updated commands
-    const registeredCommands = await rest.put(
+    console.log(`⬆️ Uploading ${commandsToRegister.length} updated application (/) commands...`);
+    const data = await rest.put(
       Routes.applicationCommands(process.env.BotID),
-      { body: commandsToRegister }
+      { body: commandsToRegister },
     );
-
-    // Update hash + ID in DB
-    for (const command of registeredCommands) {
-      const hash = db.hashCommandData(command);
-      await db.updateCommandHash(command.name, hash, command.id);
-    }
-
-    // Fetch all globally registered commands
-    const allGlobalCommands = await rest.get(Routes.applicationCommands(process.env.BotID));
-    const dbEntries = await db.getAllCommandHashes();
-
-    for (const entry of dbEntries) {
-      if (!fileCommandNames.has(entry.name)) {
-        const globalCmd = allGlobalCommands.find(cmd => cmd.name === entry.name);
-        if (globalCmd) {
-          console.log(`Deleting stale global command "${entry.name}"...`);
-          await rest.delete(Routes.applicationCommand(process.env.BotID, globalCmd.id));
-        }
-        await db.deleteCommandHash(entry.name);
-      }
-    }
-
-    console.log('All commands processed.');
+    console.log(`✅ Successfully reloaded ${data.length} commands.`);
   } catch (error) {
-    console.error('Error during command sync:', error);
+    console.error('❌ Error uploading commands:', error);
   }
 };
