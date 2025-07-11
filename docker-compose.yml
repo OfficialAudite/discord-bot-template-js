@@ -1,0 +1,20 @@
+version: '3.8'
+services:
+  discord-bot:
+    build: .
+    container_name: discord-bot
+    environment:
+      - TOKEN=${TOKEN}
+      - CLIENT_ID=${CLIENT_ID}
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+    volumes:
+      - ./logs:/app/logs
+      - ./database.db:/app/database.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('Bot is running')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s 
